@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ナースダッシュボード</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            nurse: { pink: '#F9A8C9', 'pink-light': '#FFF0F6', mint: '#6ECFB3', 'mint-light': '#EDFAF5' }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { -webkit-font-smoothing: antialiased; }
+    body { font-family: 'Hiragino Sans', 'Yu Gothic UI', 'Segoe UI', sans-serif; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: #f9a8d4; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-rose-50/40">
+  <div id="root"></div>
+
+  <script type="text/babel">
+  const { useState } = React;
+
+  /* ─── ダミーデータ ─────────────────────────────── */
+  const profile = {
+    name: '山田 花子', role: '看護師 / 3年目', dept: '内科病棟',
+    email: 'hanako.yamada@clinic.jp', tel: '090-1234-5678', staffId: 'NUR-2021-0420',
+  };
+
+  const shifts = [
+    { date: '5/20 (月)', type: '日勤', today: true },
+    { date: '5/21 (火)', type: '夜勤' },
+    { date: '5/22 (水)', type: '日勤' },
+    { date: '5/23 (木)', type: '休み' },
+    { date: '5/24 (金)', type: '日勤' },
+    { date: '5/25 (土)', type: '夜勤' },
+    { date: '5/26 (日)', type: '休み' },
+  ];
+
+  const goals = [
+    { icon: '🛡️', text: '患者さんの安全なケアを提供する', pct: 80 },
+    { icon: '🩺', text: 'フィジカルアセスメントの精度を高める', pct: 60 },
+    { icon: '👥', text: 'リーダー業務を習得する', pct: 40 },
+    { icon: '💬', text: '多職種とのコミュニケーションを強化する', pct: 100 },
+  ];
+
+  const initTasks = [
+    { id: 1, text: '毎日日報を提出する',         due: '12:00まで', done: true  },
+    { id: 2, text: '患者ケア記録を確認する',       due: '15:00まで', done: true  },
+    { id: 3, text: 'カンファレンス資料の準備',     due: '16:00まで', done: false },
+    { id: 4, text: '新人スタッフの指導・サポート', due: '17:00まで', done: false },
+  ];
+
+  const messages = [
+    { id: 1, important: true,  date: '5/20 (月)', title: '院内研修のお知らせ',
+      body: '5/25 (土) 14:00〜\n新しい医療安全研修を実施します。全スタッフの参加が必須です。' },
+    { id: 2, important: false, date: '5/18 (土)', title: 'インフルエンザ予防接種について',
+      body: '希望者は5/24までに申し込みをお願いします。' },
+    { id: 3, important: false, date: '5/15 (水)', title: '電子カルテのアップデート完了',
+      body: '新しい機能についてはマニュアルをご確認ください。' },
+  ];
+
+  /* ─── 共通パーツ ──────────────────────────────── */
+  const Card = ({ children, className = '' }) => (
+    <div className={`bg-white rounded-2xl shadow-sm border border-pink-100 p-5 flex flex-col ${className}`}>
+      {children}
+    </div>
+  );
+
+  const CardTitle = ({ icon, title }) => (
+    <div className="flex items-center gap-2 mb-4 shrink-0">
+      <span className="text-base">{icon}</span>
+      <h2 className="text-sm font-semibold text-gray-600 tracking-wide">{title}</h2>
+    </div>
+  );
+
+  const ShiftBadge = ({ type }) => {
+    const cls = { '日勤': 'bg-pink-100 text-pink-600', '夜勤': 'bg-indigo-100 text-indigo-500', '休み': 'bg-emerald-100 text-emerald-600' };
+    return <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${cls[type] ?? 'bg-gray-100 text-gray-500'}`}>{type}</span>;
+  };
+
+  const ProgressBar = ({ pct }) => (
+    <div className="w-full h-1.5 bg-pink-100 rounded-full overflow-hidden">
+      <div className="h-full rounded-full transition-all duration-500"
+        style={{ width: `${pct}%`, background: pct >= 100 ? 'linear-gradient(90deg,#34D399,#10B981)' : 'linear-gradient(90deg,#F472B6,#EC4899)' }} />
+    </div>
+  );
+
+  const CircularGauge = ({ pct }) => {
+    const r = 52, cx = 68, cy = 68;
+    const circ = 2 * Math.PI * r;
+    const offset = circ * (1 - pct / 100);
+    return (
+      <svg viewBox="0 0 136 136" className="w-32 h-32 mx-auto">
+        <defs>
+          <linearGradient id="pg" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#F9A8C9" />
+            <stop offset="100%" stopColor="#EC4899" />
+          </linearGradient>
+        </defs>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#FFE4EF" strokeWidth="11" />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="url(#pg)" strokeWidth="11"
+          strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset}
+          transform={`rotate(-90 ${cx} ${cy})`} />
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="25" fontWeight="700" fill="#1F2937">{pct}%</text>
+        <text x={cx} y={cy + 15} textAnchor="middle" fontSize="10" fill="#9CA3AF">達成率</text>
+      </svg>
+    );
+  };
+
+  /* ─── ヘッダー ────────────────────────────────── */
+  const Header = () => (
+    <header className="bg-white border-b border-pink-100 px-6 py-3.5 flex items-center justify-between sticky top-0 z-20">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center text-lg">➕</div>
+        <div>
+          <p className="font-bold text-gray-800 text-sm">こんにちは、山田 花子さん 🌸</p>
+          <p className="text-[11px] text-gray-400">今日も一緒にがんばりましょう！</p>
+        </div>
+      </div>
+      <div className="hidden sm:flex items-center gap-5 text-xs text-gray-400">
+        <span className="flex items-center gap-1.5">📅 2024年5月20日（月）</span>
+        <span className="flex items-center gap-1.5">☀️ 25°C / 18°C</span>
+      </div>
+    </header>
+  );
+
+  /* ─── プロフィールカード ─────────────────────── */
+  const ProfileCard = () => (
+    <Card>
+      <CardTitle icon="👤" title="プロフィール" />
+      <div className="flex flex-col items-center mb-5">
+        <div className="w-16 h-16 rounded-full bg-pink-50 border-2 border-pink-200 flex items-center justify-center text-3xl mb-2">👩‍⚕️</div>
+        <p className="font-bold text-gray-800 text-sm">{profile.name}</p>
+        <p className="text-xs text-gray-500 mt-0.5">{profile.role}</p>
+        <p className="text-xs text-gray-400">{profile.dept}</p>
+        <button className="mt-3 text-xs text-pink-500 border border-pink-300 rounded-full px-4 py-1 hover:bg-pink-50 transition-colors">
+          プロフィールを見る
+        </button>
+      </div>
+      <div className="space-y-2.5 mt-auto">
+        {[['✉️', profile.email], ['📞', profile.tel], ['🪪', profile.staffId]].map(([ic, val]) => (
+          <div key={val} className="flex items-center gap-2 text-xs text-gray-500">
+            <span>{ic}</span><span className="truncate">{val}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+
+  /* ─── シフトカード ────────────────────────────── */
+  const ShiftCard = () => (
+    <Card>
+      <CardTitle icon="📅" title="シフト" />
+      <div className="text-center mb-4">
+        <div className="flex items-center justify-between mb-1 px-1">
+          <span className="text-xs text-gray-400">今日のシフト</span>
+          <ShiftBadge type="日勤" />
+        </div>
+        <p className="text-2xl font-bold text-gray-800 tracking-wide">8:30 - 17:00</p>
+        <div className="w-10 h-10 bg-pink-50 rounded-full flex items-center justify-center mx-auto mt-3 border border-pink-100">
+          <span className="text-xl">📋</span>
+        </div>
+      </div>
+      <div className="mt-auto">
+        <p className="text-xs text-gray-400 mb-2">今週のシフト</p>
+        <div className="space-y-1">
+          {shifts.map((s) => (
+            <div key={s.date} className={`flex items-center justify-between px-2.5 py-1 rounded-xl ${s.today ? 'bg-pink-50' : ''}`}>
+              <span className={`text-xs ${s.today ? 'text-pink-600 font-semibold' : 'text-gray-500'}`}>{s.date}</span>
+              <ShiftBadge type={s.type} />
+            </div>
+          ))}
+        </div>
+        <button className="w-full mt-3 text-xs text-pink-500 border border-pink-200 rounded-xl py-2 hover:bg-pink-50 transition-colors">
+          シフト表を確認
+        </button>
+      </div>
+    </Card>
+  );
+
+  /* ─── 目標達成率カード ──────────────────────── */
+  const GoalCard = () => (
+    <Card>
+      <CardTitle icon="🎯" title="目標達成率" />
+      <p className="text-xs text-gray-400 text-center">今月の目標達成率</p>
+      <CircularGauge pct={72} />
+      <p className="text-xs text-gray-400 text-center mt-1 mb-4">目標 8件中 5件達成</p>
+      <div className="space-y-3 mt-auto">
+        {goals.map((g, i) => (
+          <div key={i}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-start gap-1.5 min-w-0">
+                <span className="text-xs shrink-0">{g.icon}</span>
+                <span className="text-xs text-gray-600 leading-snug">{g.text}</span>
+              </div>
+              <span className="text-xs font-semibold text-pink-500 ml-2 shrink-0">{g.pct}%</span>
+            </div>
+            <ProgressBar pct={g.pct} />
+          </div>
+        ))}
+      </div>
+      <button className="mt-4 text-xs text-pink-400 hover:text-pink-600 transition-colors text-center">
+        目標・評価を確認 →
+      </button>
+    </Card>
+  );
+
+  /* ─── タスクカード ────────────────────────────── */
+  const TaskCard = () => {
+    const [tasks, setTasks] = useState(initTasks);
+    const toggle = (id) => setTasks((prev) => prev.map((t) => t.id === id ? { ...t, done: !t.done } : t));
+    return (
+      <Card>
+        <CardTitle icon="✅" title="今日のタスク" />
+        <div className="space-y-3 flex-1">
+          {tasks.map((t) => (
+            <div key={t.id} className="flex items-start gap-3 cursor-pointer group" onClick={() => toggle(t.id)}>
+              <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0 border-2 transition-all ${t.done ? 'bg-pink-400 border-pink-400' : 'border-gray-300 group-hover:border-pink-300'}`}>
+                {t.done && <span className="text-white text-[10px] font-bold">✓</span>}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-sm leading-snug transition-colors ${t.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{t.text}</p>
+                <p className="text-[11px] text-pink-400 mt-0.5">{t.due}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button className="mt-5 w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-pink-400 to-pink-500 hover:from-pink-500 hover:to-pink-600 transition-all shadow-sm">
+          タスクをすべて見る
+        </button>
+      </Card>
+    );
+  };
+
+  /* ─── メッセージカード ──────────────────────── */
+  const MessageCard = () => (
+    <Card>
+      <CardTitle icon="📢" title="クリニックからの重要メッセージ" />
+      <div className="space-y-3 flex-1">
+        {messages.map((m) => (
+          <div key={m.id} className="border border-pink-100 rounded-xl p-3 hover:bg-pink-50/60 transition-colors">
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {m.important && <span className="text-[10px] font-bold bg-red-100 text-red-500 px-1.5 py-0.5 rounded">重要</span>}
+                <p className="text-xs font-semibold text-gray-700">{m.title}</p>
+              </div>
+              <span className="text-[10px] text-gray-400 shrink-0">{m.date}</span>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed whitespace-pre-line">{m.body}</p>
+            {m.important && (
+              <button className="mt-1.5 text-[11px] text-pink-500 hover:text-pink-700 transition-colors">詳細を確認する →</button>
+            )}
+          </div>
+        ))}
+      </div>
+      <button className="mt-3 text-xs text-pink-400 hover:text-pink-600 transition-colors text-center">
+        すべてのメッセージを見る →
+      </button>
+    </Card>
+  );
+
+  /* ─── タブバー ────────────────────────────────── */
+  const TABS = [
+    { id: 'dashboard', label: 'ダッシュボード', icon: '🏠' },
+    { id: 'goals',     label: '目標・評価',     icon: '🎯' },
+    { id: 'chat',      label: 'チャット',        icon: '💬', badge: 2 },
+    { id: 'settings',  label: '設定',            icon: '⚙️' },
+  ];
+
+  const TabBar = ({ active, setActive }) => (
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-pink-100 flex z-30">
+      {TABS.map((t) => (
+        <button key={t.id} onClick={() => setActive(t.id)}
+          className={`flex-1 flex flex-col items-center py-3 gap-0.5 relative transition-colors ${t.id === active ? 'text-pink-500' : 'text-gray-400 hover:text-gray-500'}`}>
+          {t.id === active && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-pink-400 rounded-full" />}
+          <span className="text-xl relative">
+            {t.icon}
+            {t.badge && <span className="absolute -top-1 -right-2 w-4 h-4 bg-pink-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{t.badge}</span>}
+          </span>
+          <span className="text-[11px] font-medium">{t.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+
+  /* ─── App ─────────────────────────────────────── */
+  const App = () => {
+    const [active, setActive] = useState('dashboard');
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 p-4 pb-24 overflow-auto">
+          <div className="max-w-screen-xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-start">
+            <ProfileCard />
+            <ShiftCard />
+            <GoalCard />
+            <TaskCard />
+            <MessageCard />
+          </div>
+        </main>
+        <TabBar active={active} setActive={setActive} />
+      </div>
+    );
+  };
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
