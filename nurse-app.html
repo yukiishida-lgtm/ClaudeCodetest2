@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ナースキャリアサポート</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { -webkit-font-smoothing: antialiased; }
+    body { font-family: 'Hiragino Sans', 'Yu Gothic UI', 'Segoe UI', sans-serif; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: #f9a8d4; border-radius: 4px; }
+    textarea:focus, input:focus, select:focus { outline: none; }
+    input[type=range]::-webkit-slider-thumb { background: #ec4899; }
+    input[type=range] { accent-color: #ec4899; }
+  </style>
+</head>
+<body class="bg-rose-50/40">
+  <div id="root"></div>
+  <script type="text/babel">
+  const { useState, useRef, useEffect } = React;
+
+  /* ══════════════════════════════════════════
+     初期データ
+  ══════════════════════════════════════════ */
+  const INIT_PROFILE = {
+    name: '山田 花子', role: '看護師', exp: '3年目', dept: '内科病棟',
+    clinic: 'サンプルクリニック', position: '一般スタッフ', employment: '正社員', workStyle: '二交代制',
+    email: 'hanako.yamada@clinic.jp', tel: '090-1234-5678', staffId: 'NUR-2021-0420', joinDate: '2021年4月1日',
+    skills: ['フィジカルアセスメント', '急変対応'],
+    certs: ['看護師免許', 'BLSプロバイダー'],
+  };
+
+  const INIT_GOALS = [
+    { id: 1, icon: '🛡️', text: '患者さんの安全なケアを提供する',        pct: 80,  status: '進行中' },
+    { id: 2, icon: '🩺', text: 'フィジカルアセスメントの精度を高める',    pct: 60,  status: '進行中' },
+    { id: 3, icon: '👥', text: 'リーダー業務を習得する',                 pct: 40,  status: '要確認' },
+    { id: 4, icon: '💬', text: '多職種とのコミュニケーションを強化する',  pct: 100, status: '達成'   },
+  ];
+
+  const INIT_TASKS = [
+    { id: 1, text: '毎日日報を提出する',         due: '12:00まで', done: true  },
+    { id: 2, text: '患者ケア記録を確認する',       due: '15:00まで', done: true  },
+    { id: 3, text: 'カンファレンス資料の準備',     due: '16:00まで', done: false },
+    { id: 4, text: '新人スタッフの指導・サポート', due: '17:00まで', done: false },
+  ];
+
+  const BOARD_MSGS = [
+    { id: 1, important: true,  date: '5/20 (月)', title: '院内研修のお知らせ',
+      body: '5/25 (土) 14:00〜\n新しい医療安全研修を実施します。全スタッフの参加が必須です。' },
+    { id: 2, important: false, date: '5/18 (土)', title: 'インフルエンザ予防接種について',
+      body: '希望者は5/24までに申し込みをお願いします。接種費用は全額クリニック負担です。' },
+    { id: 3, important: false, date: '5/15 (水)', title: '電子カルテのアップデート完了',
+      body: '新しい機能についてはマニュアルをご確認ください。不明点はICT担当まで。' },
+  ];
+
+  const SHIFTS = [
+    { date: '5/20 (月)', type: '日勤', today: true },
+    { date: '5/21 (火)', type: '夜勤' },
+    { date: '5/22 (水)', type: '日勤' },
+    { date: '5/23 (木)', type: '休み' },
+    { date: '5/24 (金)', type: '日勤' },
+    { date: '5/25 (土)', type: '夜勤' },
+    { date: '5/26 (日)', type: '休み' },
+  ];
+
+  const FEEDBACK = {
+    selfScore: 4,
+    bossComment: '日報やケア記録の内容が丁寧です。\n次はリーダー業務にも少しずつ挑戦していきましょう。',
+  };
+
+  const CHAT_CONTACTS = [
+    { id: 1, name: '佐藤 直樹（主任）', emoji: '👨‍💼', online: true,  time: '10:30', lastMsg: 'ありがとうございます！', unread: 2, isGroup: false },
+    { id: 2, name: '田中 美咲（先輩）', emoji: '👩‍⚕️', online: false, time: '昨日',  lastMsg: 'カンファレンスの資料ありがとう！', unread: 1, isGroup: false },
+    { id: 3, name: '内科病棟 グループ', emoji: '👥',  online: false, time: '5/18',  lastMsg: '明日の申し送りについて', unread: 0, isGroup: true },
+    { id: 4, name: '鈴木 健太（医師）', emoji: '👨‍⚕️', online: false, time: '5/17',  lastMsg: '確認しました。', unread: 0, isGroup: false },
+    { id: 5, name: 'クリニックお知らせ', emoji: '📢', online: false, time: '5/15',  lastMsg: 'インフルエンザ予防接種について', unread: 0, isGroup: false },
+  ];
+
+  const INIT_CHAT_MSGS = {
+    1: [
+      { id: 1, from: 'other', text: 'おはようございます！\n今日の業務で何か相談はありますか？', time: '09:15' },
+      { id: 2, from: 'me',    text: 'おはようございます！\n午前中の点滴管理について確認したいことがあります。', time: '09:17', read: true },
+      { id: 3, from: 'other', text: 'わかりました。\n11時ごろにナースステーションで話しましょう！', time: '09:20' },
+      { id: 4, from: 'me',    text: 'ありがとうございます！\nよろしくお願いします😊', time: '09:21', read: true },
+    ],
+    2: [
+      { id: 1, from: 'other', text: 'カンファレンスの資料、確認しました！\nとても分かりやすかったです。', time: '昨日 15:30' },
+      { id: 2, from: 'me',    text: 'ありがとうございます！\n参考にしていただけて嬉しいです。', time: '昨日 15:45', read: true },
+    ],
+    3: [
+      { id: 1, from: 'other', text: '明日の申し送りについて確認です。\n17:30からナースステーションで行います。', time: '5/18 16:00' },
+    ],
+    4: [
+      { id: 1, from: 'me',    text: '先ほどの処置の件、ご確認いただけますか？', time: '5/17 11:00', read: true },
+      { id: 2, from: 'other', text: '確認しました。', time: '5/17 11:20' },
+    ],
+    5: [
+      { id: 1, from: 'other', text: 'インフルエンザ予防接種について\n希望者は5/24までに申し込みをお願いします。', time: '5/15 09:00' },
+    ],
+  };
+
+  const TABS = [
+    { id: 'dashboard', label: 'ダッシュボード',   icon: '🏠' },
+    { id: 'goals',     label: '目標・評価',       icon: '🎯' },
+    { id: 'chat',      label: 'チャット',          icon: '💬', badge: 2 },
+    { id: 'beauty',    label: '美容ナースの知識',  icon: '📖' },
+    { id: 'settings',  label: '設定',              icon: '⚙️' },
+  ];
+
+  const NEWS = [
+    { id:1, badge:'注目', title:'ヒアルロン酸注入製剤の新ガイドラインが公開',
+      desc:'日本美容医療協会より、ヒアルロン酸注入に関する最新の安全管理ガイドラインが公開されました。',
+      tags:['ガイドライン','注入治療'], date:'2024/05/20', bg:'bg-pink-100', icon:'💉' },
+    { id:2, title:'美肌治療における新しい成分の研究結果',
+      desc:'ナイアシンアミドと成長因子を組み合わせた治療の有効性に関する臨床研究が発表されました。',
+      tags:['スキンケア','研究'], date:'2024/05/18', bg:'bg-blue-100', icon:'🔬' },
+    { id:3, title:'レーザー治療の安全対策に関するセミナー開催',
+      desc:'レーザー治療におけるリスク管理とアフターケアについて、オンラインセミナーが開催されます。',
+      tags:['レーザー治療','セミナー'], date:'2024/05/15', bg:'bg-purple-100', icon:'💡' },
+    { id:4, title:'美容医療市場の最新トレンドレポート',
+      desc:'2024年の美容医療市場規模や人気施術のトレンドがレポートで発表されました。',
+      tags:['市場動向','レポート'], date:'2024/05/10', bg:'bg-emerald-100', icon:'📊' },
+  ];
+
+  const EQUIPMENT = [
+    { id:1, name:'ピコレーザー（PicoSure）',       cat:'レーザー',
+      desc:'シミ・そばかす・タトゥー治療に用いられるピコ秒レーザー。短いパルス幅で周囲組織へのダメージを最小限に抑えます。',
+      effects:'色素沈着改善・タトゥー除去・美肌効果', icon:'⚡', bg:'bg-purple-50' },
+    { id:2, name:'高周波（RF）機器（Secret PRO）',  cat:'RF・高周波',
+      desc:'高周波エネルギーで真皮層に働きかけ、コラーゲン生成を促進。たるみ改善や肌の引き締めに効果的です。',
+      effects:'たるみ改善・ハリ感UP・小じわ改善', icon:'📡', bg:'bg-blue-50' },
+    { id:3, name:'水光注射機器（Booster Pro）',     cat:'注入・導入',
+      desc:'均一な深さで薬剤を注入し、肌の保湿力や弾力を高める機器。ダウンタイムが少なく、幅広い肌質に対応可能です。',
+      effects:'保湿・ツヤ感UP・小じわ改善', icon:'💧', bg:'bg-cyan-50' },
+    { id:4, name:'脂肪冷却（CoolTech Define）',    cat:'その他',
+      desc:'脂肪細胞を冷却し、自然な代謝で体外へ排出する痩身機器。切らずに部分痩せが可能です。',
+      effects:'部分痩せ・ボディライン改善', icon:'❄️', bg:'bg-indigo-50' },
+  ];
+  const EQ_CATS = ['すべて','レーザー','RF・高周波','注入・導入','その他'];
+
+  const SETTING_MENUS = [
+    { id: 'basic',   icon: '👤', label: '基本情報',     sub: 'プロフィール・所属など' },
+    { id: 'account', icon: '🔒', label: 'アカウント設定', sub: 'メール・パスワードの変更' },
+    { id: 'notify',  icon: '🔔', label: '通知設定',     sub: '通知の受け取り方法' },
+    { id: 'display', icon: '🖥️', label: '表示設定',     sub: 'テーマ・言語など' },
+    { id: 'data',    icon: '🗄️', label: 'データ管理',   sub: 'データのエクスポートなど' },
+  ];
+
+  /* ══════════════════════════════════════════
+     共通コンポーネント
+  ══════════════════════════════════════════ */
+  const Card = ({ children, className = '' }) => (
+    <div className={`bg-white rounded-2xl shadow-sm border border-pink-100 p-5 flex flex-col ${className}`}>{children}</div>
+  );
+  const CardTitle = ({ icon, title }) => (
+    <div className="flex items-center gap-2 mb-4 shrink-0">
+      <span className="text-base">{icon}</span>
+      <h2 className="text-sm font-semibold text-gray-600 tracking-wide">{title}</h2>
+    </div>
+  );
+  const ShiftBadge = ({ type }) => {
+    const cls = { '日勤': 'bg-pink-100 text-pink-600', '夜勤': 'bg-indigo-100 text-indigo-500', '休み': 'bg-emerald-100 text-emerald-600' };
+    return <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${cls[type] ?? 'bg-gray-100 text-gray-500'}`}>{type}</span>;
+  };
+  const StatusBadge = ({ status }) => {
+    const s = { '進行中': 'bg-pink-100 text-pink-600', '達成': 'bg-emerald-100 text-emerald-600', '要確認': 'bg-amber-100 text-amber-600' };
+    return <span className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${s[status] ?? 'bg-gray-100 text-gray-500'}`}>{status}</span>;
+  };
+  const ProgressBar = ({ pct }) => (
+    <div className="w-full h-1.5 bg-pink-100 rounded-full overflow-hidden">
+      <div className="h-full rounded-full transition-all duration-500"
+        style={{ width: `${pct}%`, background: pct >= 100 ? 'linear-gradient(90deg,#34D399,#10B981)' : 'linear-gradient(90deg,#F472B6,#EC4899)' }} />
+    </div>
+  );
+  const CircularGauge = ({ pct, size = 'md' }) => {
+    const cfg = {
+      sm: { r:52, cx:68, cy:68, vb:'0 0 136 136', cls:'w-32 h-32', fs1:25, fs2:10, y1:-4, y2:15 },
+      md: { r:70, cx:90, cy:90, vb:'0 0 180 180', cls:'w-44 h-44', fs1:36, fs2:12, y1:-6, y2:18 },
+    }[size];
+    const circ = 2*Math.PI*cfg.r, offset = circ*(1-pct/100);
+    return (
+      <svg viewBox={cfg.vb} className={`${cfg.cls} mx-auto`}>
+        <defs><linearGradient id={`pg-${size}`} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#F9A8C9"/><stop offset="100%" stopColor="#EC4899"/>
+        </linearGradient></defs>
+        <circle cx={cfg.cx} cy={cfg.cy} r={cfg.r} fill="none" stroke="#FFE4EF" strokeWidth="11"/>
+        <circle cx={cfg.cx} cy={cfg.cy} r={cfg.r} fill="none" stroke={`url(#pg-${size})`} strokeWidth="11"
+          strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset}
+          transform={`rotate(-90 ${cfg.cx} ${cfg.cy})`}/>
+        <text x={cfg.cx} y={cfg.cy+cfg.y1} textAnchor="middle" fontSize={cfg.fs1} fontWeight="700" fill="#1F2937">{pct}%</text>
+        <text x={cfg.cx} y={cfg.cy+cfg.y2} textAnchor="middle" fontSize={cfg.fs2} fill="#9CA3AF">達成率</text>
+      </svg>
+    );
+  };
+  const StarRating = ({ value, max=5 }) => (
+    <div className="flex gap-0.5">
+      {Array.from({length:max},(_,i)=>(
+        <svg key={i} viewBox="0 0 20 20" className={`w-5 h-5 ${i<value?'text-yellow-400':'text-gray-200'}`} fill="currentColor">
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+        </svg>
+      ))}
+    </div>
+  );
+  const Toggle = ({ checked, onChange }) => (
+    <button onClick={() => onChange(!checked)}
+      className={`w-11 h-6 rounded-full transition-colors relative ${checked ? 'bg-pink-400' : 'bg-gray-200'}`}>
+      <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${checked ? 'left-5' : 'left-0.5'}`}/>
+    </button>
+  );
+  const PinkBtn = ({ children, onClick, className='' }) => (
+    <button onClick={onClick}
+      className={`bg-gradient-to-r from-pink-400 to-pink-500 hover:from-pink-500 hover:to-pink-600 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-all shadow-sm ${className}`}>
+      {children}
+    </button>
+  );
+  const OutlineBtn = ({ children, onClick, className='' }) => (
+    <button onClick={onClick}
+      className={`border border-pink-300 text-pink-500 hover:bg-pink-50 font-semibold rounded-xl px-4 py-2 text-sm transition-colors ${className}`}>
+      {children}
+    </button>
+  );
+  const LabelInput = ({ label, value, onChange, type='text', placeholder='' }) => (
+    <div>
+      <label className="text-xs text-gray-500 mb-1 block">{label}</label>
+      <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+        className="w-full text-sm border border-pink-100 rounded-xl px-3 py-2 bg-pink-50/30 focus:border-pink-300 focus:bg-white transition-colors"/>
+    </div>
+  );
+
+  /* ══════════════════════════════════════════
+     モーダル
+  ══════════════════════════════════════════ */
+  const Modal = ({ title, onClose, children, wide=false }) => (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className={`bg-white rounded-2xl shadow-xl w-full ${wide?'max-w-2xl':'max-w-lg'} p-6 max-h-[85vh] overflow-y-auto`}
+        onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="font-bold text-gray-800">{title}</h3>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-xl">×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+
+  /* ══════════════════════════════════════════
+     ヘッダー・タブバー
+  ══════════════════════════════════════════ */
+  const Header = ({ activeTab, profile }) => {
+    const isDash = activeTab === 'dashboard';
+    return (
+      <header className="bg-white border-b border-pink-100 px-6 py-3.5 flex items-center justify-between sticky top-0 z-20">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center text-lg">➕</div>
+          <div>
+            {isDash
+              ? <><p className="font-bold text-gray-800 text-sm">こんにちは、{profile.name}さん 🌸</p><p className="text-[11px] text-gray-400">今日も一緒にがんばりましょう！</p></>
+              : <><p className="font-bold text-gray-800 text-sm">ナースキャリアサポート</p><p className="text-[11px] text-gray-400">一歩ずつ、なりたい自分へ</p></>
+            }
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {isDash
+            ? <div className="hidden sm:flex items-center gap-5 text-xs text-gray-400">
+                <span className="flex items-center gap-1.5">📅 2024年5月20日（月）</span>
+                <span className="flex items-center gap-1.5">☀️ 25°C / 18°C</span>
+              </div>
+            : <>
+                <button className="relative w-9 h-9 bg-pink-50 rounded-full flex items-center justify-center hover:bg-pink-100 transition-colors">
+                  <span className="text-lg">🔔</span>
+                  <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-pink-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">3</span>
+                </button>
+                <div className="flex items-center gap-2 cursor-pointer hover:bg-pink-50 rounded-xl px-2 py-1 transition-colors">
+                  <div className="w-8 h-8 rounded-full bg-pink-100 border-2 border-pink-200 flex items-center justify-center text-lg">👩‍⚕️</div>
+                  <div className="hidden sm:block">
+                    <p className="text-xs font-bold text-gray-800 leading-tight">{profile.name}</p>
+                    <p className="text-[10px] text-gray-400">{profile.role} / {profile.exp}</p>
+                  </div>
+                  <span className="text-gray-400 text-xs">▾</span>
+                </div>
+              </>
+          }
+        </div>
+      </header>
+    );
+  };
+
+  const TabBar = ({ active, setActive, unreadCount }) => (
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-pink-100 flex z-30">
+      {TABS.map((t) => (
+        <button key={t.id} onClick={() => setActive(t.id)}
+          className={`flex-1 flex flex-col items-center py-3 gap-0.5 relative transition-colors ${t.id===active?'text-pink-500':'text-gray-400 hover:text-gray-500'}`}>
+          {t.id===active && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-pink-400 rounded-full"/>}
+          {t.id===active && <span className="absolute inset-x-2 top-0 bottom-0 bg-pink-50 rounded-xl -z-10"/>}
+          <span className="text-xl relative z-10">
+            {t.icon}
+            {t.id==='chat' && unreadCount>0 && (
+              <span className="absolute -top-1 -right-2 w-4 h-4 bg-pink-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{unreadCount}</span>
+            )}
+          </span>
+          <span className="text-[10px] font-medium leading-tight text-center px-0.5">{t.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+
+  /* ══════════════════════════════════════════
+     ダッシュボード
+  ══════════════════════════════════════════ */
+  const DashboardScreen = ({ profile, tasks, goals, toggleTask, setActive, addTask }) => {
+    const [msgModal, setMsgModal]   = useState(null);
+    const [taskModal, setTaskModal] = useState(false);
+    const [newTask, setNewTask]     = useState({ text:'', due:'' });
+    const donePct = Math.round(tasks.filter(t=>t.done).length / tasks.length * 100);
+    const avgGoalPct = Math.round(goals.reduce((s,g)=>s+g.pct,0)/goals.length);
+
+    return (
+      <>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-start">
+          {/* プロフィール */}
+          <Card>
+            <CardTitle icon="👤" title="プロフィール"/>
+            <div className="flex flex-col items-center mb-5">
+              <div className="w-16 h-16 rounded-full bg-pink-50 border-2 border-pink-200 flex items-center justify-center text-3xl mb-2">👩‍⚕️</div>
+              <p className="font-bold text-gray-800 text-sm">{profile.name}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{profile.role} / {profile.exp}</p>
+              <p className="text-xs text-gray-400">{profile.dept}</p>
+              <button onClick={()=>setActive('settings')}
+                className="mt-3 text-xs text-pink-500 border border-pink-300 rounded-full px-4 py-1 hover:bg-pink-50 transition-colors">
+                プロフィールを見る
+              </button>
+            </div>
+            <div className="space-y-2.5 mt-auto">
+              {[['✉️',profile.email],['📞',profile.tel],['🪪',profile.staffId]].map(([ic,val])=>(
+                <div key={val} className="flex items-center gap-2 text-xs text-gray-500"><span>{ic}</span><span className="truncate">{val}</span></div>
+              ))}
+            </div>
+          </Card>
+
+          {/* シフト */}
+          <Card>
+            <CardTitle icon="📅" title="シフト"/>
+            <div className="text-center mb-4">
+              <div className="flex items-center justify-between mb-1 px-1">
+                <span className="text-xs text-gray-400">今日のシフト</span><ShiftBadge type="日勤"/>
+              </div>
+              <p className="text-2xl font-bold text-gray-800 tracking-wide">8:30 - 17:00</p>
+              <div className="w-10 h-10 bg-pink-50 rounded-full flex items-center justify-center mx-auto mt-3 border border-pink-100"><span className="text-xl">📋</span></div>
+            </div>
+            <div className="mt-auto">
+              <p className="text-xs text-gray-400 mb-2">今週のシフト</p>
+              <div className="space-y-1">
+                {SHIFTS.map(s=>(
+                  <div key={s.date} className={`flex items-center justify-between px-2.5 py-1 rounded-xl ${s.today?'bg-pink-50':''}`}>
+                    <span className={`text-xs ${s.today?'text-pink-600 font-semibold':'text-gray-500'}`}>{s.date}</span>
+                    <ShiftBadge type={s.type}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+
+          {/* 目標達成率 */}
+          <Card>
+            <CardTitle icon="🎯" title="目標達成率"/>
+            <p className="text-xs text-gray-400 text-center">今月の目標達成率</p>
+            <CircularGauge pct={avgGoalPct} size="sm"/>
+            <p className="text-xs text-gray-400 text-center mt-1 mb-4">目標 {goals.length}件中 {goals.filter(g=>g.pct>=100).length}件達成</p>
+            <div className="space-y-3 mt-auto">
+              {goals.map(g=>(
+                <div key={g.id}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-start gap-1.5 min-w-0">
+                      <span className="text-xs shrink-0">{g.icon}</span>
+                      <span className="text-xs text-gray-600 leading-snug">{g.text}</span>
+                    </div>
+                    <span className="text-xs font-semibold text-pink-500 ml-2 shrink-0">{g.pct}%</span>
+                  </div>
+                  <ProgressBar pct={g.pct}/>
+                </div>
+              ))}
+            </div>
+            <button onClick={()=>setActive('goals')} className="mt-4 text-xs text-pink-400 hover:text-pink-600 transition-colors text-center">
+              目標・評価を確認 →
+            </button>
+          </Card>
+
+          {/* タスク */}
+          <Card>
+            <CardTitle icon="✅" title="今日のタスク"/>
+            <div className="space-y-3 flex-1">
+              {tasks.map(t=>(
+                <div key={t.id} className="flex items-start gap-3 cursor-pointer group" onClick={()=>toggleTask(t.id)}>
+                  <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0 border-2 transition-all ${t.done?'bg-pink-400 border-pink-400':'border-gray-300 group-hover:border-pink-300'}`}>
+                    {t.done && <span className="text-white text-[10px] font-bold">✓</span>}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-sm leading-snug transition-colors ${t.done?'line-through text-gray-400':'text-gray-700'}`}>{t.text}</p>
+                    <p className="text-[11px] text-pink-400 mt-0.5">{t.due}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={()=>setTaskModal(true)}
+              className="mt-5 w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-pink-400 to-pink-500 hover:from-pink-500 hover:to-pink-600 transition-all shadow-sm">
+              タスクを追加する
+            </button>
+          </Card>
+
+          {/* メッセージ */}
+          <Card>
+            <CardTitle icon="📢" title="クリニックからの重要メッセージ"/>
+            <div className="space-y-3 flex-1">
+              {BOARD_MSGS.map(m=>(
+                <div key={m.id} className="border border-pink-100 rounded-xl p-3 hover:bg-pink-50/60 transition-colors">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {m.important && <span className="text-[10px] font-bold bg-red-100 text-red-500 px-1.5 py-0.5 rounded">重要</span>}
+                      <p className="text-xs font-semibold text-gray-700">{m.title}</p>
+                    </div>
+                    <span className="text-[10px] text-gray-400 shrink-0">{m.date}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed line-clamp-2 whitespace-pre-line">{m.body}</p>
+                  <button onClick={()=>setMsgModal(m)} className="mt-1.5 text-[11px] text-pink-500 hover:text-pink-700 transition-colors">詳細を確認する →</button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        {/* メッセージ詳細モーダル */}
+        {msgModal && (
+          <Modal title={msgModal.title} onClose={()=>setMsgModal(null)}>
+            <p className="text-xs text-gray-400 mb-3">{msgModal.date}</p>
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{msgModal.body}</p>
+            <div className="mt-6 flex justify-end"><OutlineBtn onClick={()=>setMsgModal(null)}>閉じる</OutlineBtn></div>
+          </Modal>
+        )}
+
+        {/* タスク追加モーダル */}
+        {taskModal && (
+          <Modal title="タスクを追加" onClose={()=>setTaskModal(false)}>
+            <div className="space-y-3">
+              <LabelInput label="タスク名" value={newTask.text} onChange={v=>setNewTask(p=>({...p,text:v}))} placeholder="例：患者ケア記録の確認"/>
+              <LabelInput label="期限" value={newTask.due} onChange={v=>setNewTask(p=>({...p,due:v}))} placeholder="例：17:00まで"/>
+            </div>
+            <div className="flex gap-2 mt-5 justify-end">
+              <OutlineBtn onClick={()=>setTaskModal(false)}>キャンセル</OutlineBtn>
+              <PinkBtn onClick={()=>{
+                if(!newTask.text.trim()) return;
+                addTask(newTask);
+                setNewTask({text:'',due:''});
+                setTaskModal(false);
+              }}>追加する</PinkBtn>
+            </div>
+          </Modal>
+        )}
+      </>
+    );
+  };
+
+  /* ══════════════════════════════════════════
+     目標・評価
+  ══════════════════════════════════════════ */
+  const GoalsScreen = ({ goals, setGoals, progressNote, setProgressNote, setActive }) => {
+    const [editGoal, setEditGoal] = useState(null);
+    const [saved, setSaved]       = useState(false);
+    const avgPct = Math.round(goals.reduce((s,g)=>s+g.pct,0)/goals.length);
+
+    const getStatus = (pct) => pct>=100 ? '達成' : pct>=60 ? '進行中' : '要確認';
+
+    const saveNote = () => { setSaved(true); setTimeout(()=>setSaved(false),2000); };
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+          {/* サマリー */}
+          <div className="lg:col-span-2">
+            <Card>
+              <CardTitle icon="🎯" title="今月の目標サマリー"/>
+              <CircularGauge pct={avgPct} size="md"/>
+              <div className="text-center mt-3">
+                <p className="text-sm text-gray-600">目標 {goals.length}件中 <span className="text-pink-500 font-bold text-base">{goals.filter(g=>g.pct>=100).length}件達成</span></p>
+                <div className="inline-flex items-center gap-1.5 mt-3 bg-pink-50 border border-pink-100 rounded-xl px-3 py-1.5">
+                  <span className="text-xs">📅</span>
+                  <span className="text-xs text-gray-500">今月の評価期間：5/1 〜 5/31</span>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* 目標一覧 */}
+          <div className="lg:col-span-3">
+            <Card>
+              <CardTitle icon="📋" title="目標一覧"/>
+              <div className="hidden sm:grid grid-cols-[1fr_140px_72px_80px_40px] gap-x-3 mb-2 px-1">
+                {['','進捗','達成率','ステータス',''].map((h,i)=>(
+                  <span key={i} className="text-[11px] text-gray-400 font-medium text-right last:text-center first:text-left">{h}</span>
+                ))}
+              </div>
+              <div className="space-y-4 flex-1">
+                {goals.map(g=>(
+                  <div key={g.id} className="sm:grid sm:grid-cols-[1fr_140px_72px_80px_40px] sm:gap-x-3 sm:items-center flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base shrink-0">{g.icon}</span>
+                      <span className="text-sm text-gray-700 leading-snug">{g.text}</span>
+                    </div>
+                    <ProgressBar pct={g.pct}/>
+                    <span className="text-sm font-semibold text-gray-700 text-right">{g.pct}%</span>
+                    <div className="flex sm:justify-center"><StatusBadge status={g.status}/></div>
+                    <div className="flex sm:justify-center">
+                      <button onClick={()=>setEditGoal({...g})}
+                        className="text-xs text-gray-400 hover:text-pink-500 transition-colors">✏️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* 進捗入力 */}
+          <Card>
+            <CardTitle icon="✏️" title="今週の進捗入力"/>
+            <p className="text-xs text-gray-400 mb-3 -mt-2">今週できたこと、学んだこと、次に改善したいことを記入してください</p>
+            <textarea value={progressNote} onChange={e=>setProgressNote(e.target.value)} rows={6}
+              className="flex-1 w-full text-sm text-gray-700 border border-pink-100 rounded-xl p-3.5 resize-none bg-pink-50/40 focus:border-pink-300 focus:bg-white transition-colors leading-relaxed"/>
+            <button onClick={saveNote}
+              className={`mt-4 w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${saved?'bg-emerald-400 text-white':'bg-gradient-to-r from-pink-400 to-pink-500 hover:from-pink-500 hover:to-pink-600 text-white shadow-sm'}`}>
+              {saved ? <><span>✓</span>保存しました</> : <><span>💾</span>保存する</>}
+            </button>
+          </Card>
+
+          {/* フィードバック */}
+          <Card>
+            <CardTitle icon="⭐" title="評価フィードバック"/>
+            <div className="space-y-4 flex-1">
+              <div className="flex items-center justify-between py-3 border-b border-pink-50">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 bg-pink-50 rounded-full flex items-center justify-center text-sm">👤</div>
+                  <span className="text-sm text-gray-600 font-medium">自己評価</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StarRating value={FEEDBACK.selfScore}/><span className="text-sm font-bold text-gray-700">{FEEDBACK.selfScore} / 5</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-3 border-b border-pink-50">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 bg-pink-50 rounded-full flex items-center justify-center text-sm">👩‍💼</div>
+                  <span className="text-sm text-gray-600 font-medium">上司評価</span>
+                </div>
+                <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">評価待ち</span>
+              </div>
+              <div className="py-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 bg-pink-50 rounded-full flex items-center justify-center text-sm">💬</div>
+                  <span className="text-sm text-gray-600 font-medium">上司コメント</span>
+                </div>
+                <div className="bg-pink-50/60 border border-pink-100 rounded-xl p-3.5 ml-9">
+                  <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{FEEDBACK.bossComment}</p>
+                </div>
+              </div>
+            </div>
+            <button onClick={()=>setActive('settings')}
+              className="mt-4 w-full py-2.5 rounded-xl text-sm font-semibold text-pink-500 border border-pink-300 hover:bg-pink-50 transition-colors">
+              評価を確認する ›
+            </button>
+          </Card>
+        </div>
+
+        {/* 目標編集モーダル */}
+        {editGoal && (
+          <Modal title="目標の進捗を更新" onClose={()=>setEditGoal(null)}>
+            <div className="mb-2">
+              <p className="text-sm font-semibold text-gray-700 mb-1">{editGoal.icon} {editGoal.text}</p>
+            </div>
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs text-gray-500">達成率</label>
+                <span className="text-lg font-bold text-pink-500">{editGoal.pct}%</span>
+              </div>
+              <input type="range" min="0" max="100" step="5" value={editGoal.pct}
+                onChange={e=>setEditGoal(p=>({...p, pct:Number(e.target.value), status:getStatus(Number(e.target.value))}))}
+                className="w-full"/>
+              <div className="flex justify-between text-[10px] text-gray-400 mt-1"><span>0%</span><span>50%</span><span>100%</span></div>
+            </div>
+            <div className="mb-6">
+              <label className="text-xs text-gray-500 mb-2 block">ステータス</label>
+              <div className="flex gap-2">
+                {['進行中','要確認','達成'].map(s=>(
+                  <button key={s} onClick={()=>setEditGoal(p=>({...p,status:s}))}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${editGoal.status===s?'bg-pink-100 border-pink-300 text-pink-600':'border-gray-200 text-gray-500 hover:border-pink-200'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <OutlineBtn onClick={()=>setEditGoal(null)}>キャンセル</OutlineBtn>
+              <PinkBtn onClick={()=>{
+                setGoals(prev=>prev.map(g=>g.id===editGoal.id?editGoal:g));
+                setEditGoal(null);
+              }}>保存する</PinkBtn>
+            </div>
+          </Modal>
+        )}
+      </div>
+    );
+  };
+
+  /* ══════════════════════════════════════════
+     美容ナースの知識
+  ══════════════════════════════════════════ */
+  const BeautyScreen = () => {
+    const [subTab,  setSubTab]  = useState('news');
+    const [eqCat,   setEqCat]   = useState('すべて');
+    const [detail,  setDetail]  = useState(null);
+
+    const filteredEq = EQUIPMENT.filter(e => eqCat === 'すべて' || e.cat === eqCat);
+
+    const CatBadge = ({ cat }) => {
+      const c = { 'レーザー':'bg-purple-100 text-purple-600', 'RF・高周波':'bg-blue-100 text-blue-600',
+                  '注入・導入':'bg-cyan-100 text-cyan-600', 'その他':'bg-emerald-100 text-emerald-600' };
+      return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c[cat]??'bg-gray-100 text-gray-500'}`}>{cat}</span>;
+    };
+
+    return (
+      <>
+        {/* サブタブ */}
+        <div className="flex mb-4 bg-white rounded-2xl border border-pink-100 shadow-sm overflow-hidden">
+          {[['news','📰','美容看護師として知っておくべきニュース'],['equip','🔧','機材の知識']].map(([id,ic,label])=>(
+            <button key={id} onClick={()=>setSubTab(id)}
+              className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold transition-colors ${subTab===id?'bg-pink-50 text-pink-600 border-b-2 border-pink-400':'text-gray-500 hover:bg-gray-50'}`}>
+              <span>{ic}</span><span>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* ── 左: 最新ニュース ── */}
+          <div className={`bg-white rounded-2xl border border-pink-100 shadow-sm p-5 ${subTab==='equip'?'lg:hidden':''}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-base">📰</span>
+                <h2 className="text-sm font-semibold text-gray-600">最新ニュース</h2>
+              </div>
+              <button className="text-xs text-pink-500 hover:text-pink-700 transition-colors">すべて見る ›</button>
+            </div>
+            <div className="space-y-4">
+              {NEWS.map(n => (
+                <div key={n.id} className="flex gap-3 pb-4 border-b border-pink-50 last:border-0 last:pb-0 cursor-pointer hover:bg-pink-50/40 rounded-xl p-2 -m-2 transition-colors"
+                  onClick={() => setDetail({ type:'news', data:n })}>
+                  {/* サムネイル */}
+                  <div className={`w-20 h-16 rounded-xl ${n.bg} flex items-center justify-center text-2xl shrink-0`}>{n.icon}</div>
+                  {/* テキスト */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                      {n.badge && <span className="text-[10px] font-bold bg-red-100 text-red-500 px-1.5 py-0.5 rounded">注目</span>}
+                      <p className="text-sm font-semibold text-gray-800 leading-snug">{n.title}</p>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed line-clamp-2 mb-2">{n.desc}</p>
+                    <div className="flex items-center justify-between flex-wrap gap-1">
+                      <div className="flex gap-1 flex-wrap">
+                        {n.tags.map(t => <span key={t} className="text-[10px] bg-pink-50 text-pink-500 border border-pink-100 px-2 py-0.5 rounded-full">{t}</span>)}
+                      </div>
+                      <span className="text-[10px] text-gray-400">{n.date}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── 右: 機材の知識 ── */}
+          <div className={`bg-white rounded-2xl border border-pink-100 shadow-sm p-5 ${subTab==='news'?'':'lg:col-span-2'}`}>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-base">🔧</span>
+              <h2 className="text-sm font-semibold text-gray-600">機材の知識</h2>
+            </div>
+            {/* フィルター */}
+            <div className="flex gap-1.5 mb-4 flex-wrap">
+              {EQ_CATS.map(c => (
+                <button key={c} onClick={() => setEqCat(c)}
+                  className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${eqCat===c?'bg-pink-100 text-pink-600':'text-gray-400 hover:bg-gray-100'}`}>
+                  {c}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-4">
+              {filteredEq.map(eq => (
+                <div key={eq.id} className="flex gap-3 pb-4 border-b border-pink-50 last:border-0 last:pb-0">
+                  {/* アイコン */}
+                  <div className={`w-16 h-16 rounded-xl ${eq.bg} flex items-center justify-center text-2xl shrink-0`}>{eq.icon}</div>
+                  {/* テキスト */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <p className="text-sm font-semibold text-gray-800">{eq.name}</p>
+                      <CatBadge cat={eq.cat}/>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed mb-1">{eq.desc}</p>
+                    <p className="text-[11px] text-gray-400">主な効果：{eq.effects}</p>
+                  </div>
+                  <button onClick={() => setDetail({ type:'equip', data:eq })}
+                    className="shrink-0 self-end text-xs text-pink-500 border border-pink-200 rounded-full px-3 py-1.5 hover:bg-pink-50 transition-colors whitespace-nowrap">
+                    詳細を見る
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* 詳細モーダル */}
+        {detail && (
+          <Modal title={detail.type==='news' ? detail.data.title : detail.data.name} onClose={() => setDetail(null)}>
+            {detail.type === 'news' ? (
+              <>
+                <div className={`w-full h-28 rounded-xl ${detail.data.bg} flex items-center justify-center text-4xl mb-4`}>{detail.data.icon}</div>
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  {detail.data.badge && <span className="text-[10px] font-bold bg-red-100 text-red-500 px-1.5 py-0.5 rounded">注目</span>}
+                  {detail.data.tags.map(t => <span key={t} className="text-[10px] bg-pink-50 text-pink-500 border border-pink-100 px-2 py-0.5 rounded-full">{t}</span>)}
+                  <span className="text-[10px] text-gray-400 ml-auto">{detail.data.date}</span>
+                </div>
+                <p className="text-sm text-gray-700 leading-relaxed">{detail.data.desc}</p>
+              </>
+            ) : (
+              <>
+                <div className={`w-full h-28 rounded-xl ${detail.data.bg} flex items-center justify-center text-4xl mb-4`}>{detail.data.icon}</div>
+                <div className="flex items-center gap-2 mb-3"><CatBadge cat={detail.data.cat}/></div>
+                <p className="text-sm text-gray-700 leading-relaxed mb-4">{detail.data.desc}</p>
+                <div className="bg-pink-50 border border-pink-100 rounded-xl p-3">
+                  <p className="text-xs text-gray-500">主な効果</p>
+                  <p className="text-sm font-semibold text-pink-600 mt-1">{detail.data.effects}</p>
+                </div>
+              </>
+            )}
+            <div className="mt-5 flex justify-end"><OutlineBtn onClick={() => setDetail(null)}>閉じる</OutlineBtn></div>
+          </Modal>
+        )}
+      </>
+    );
+  };
+
+  /* ══════════════════════════════════════════
+     チャット
+  ══════════════════════════════════════════ */
+  const ChatScreen = () => {
+    const [selectedId, setSelectedId] = useState(1);
+    const [filter, setFilter]         = useState('all');
+    const [allMsgs, setAllMsgs]       = useState(INIT_CHAT_MSGS);
+    const [inputText, setInputText]   = useState('');
+    const endRef = useRef(null);
+
+    const selected  = CHAT_CONTACTS.find(c=>c.id===selectedId);
+    const messages  = allMsgs[selectedId] || [];
+    const filtered  = CHAT_CONTACTS.filter(c => filter==='unread'?c.unread>0 : filter==='group'?c.isGroup : true);
+
+    const sendMsg = () => {
+      const text = inputText.trim(); if (!text) return;
+      const now  = new Date();
+      const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      setAllMsgs(prev=>({ ...prev, [selectedId]: [...(prev[selectedId]||[]), {id:Date.now(),from:'me',text,time,read:false}] }));
+      setInputText('');
+    };
+
+    useEffect(() => { endRef.current?.scrollIntoView({behavior:'smooth'}); }, [allMsgs, selectedId]);
+
+    const H = 'h-[calc(100vh-13rem)]';
+    return (
+      <div className="flex gap-4 items-start">
+        {/* 左: 一覧 */}
+        <div className={`w-80 shrink-0 bg-white rounded-2xl border border-pink-100 shadow-sm flex flex-col ${H}`}>
+          <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-pink-50">
+            <div className="flex items-center gap-2"><span className="text-base">💬</span><h2 className="text-sm font-semibold text-gray-600">チャット一覧</h2></div>
+            <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-pink-50 transition-colors text-gray-400 text-lg">✏️</button>
+          </div>
+          <div className="flex gap-1.5 px-4 py-2.5 border-b border-pink-50">
+            {[['all','すべて'],['unread','未読'],['group','グループ']].map(([val,label])=>{
+              const cnt = val==='unread' ? CHAT_CONTACTS.reduce((s,c)=>s+c.unread,0) : null;
+              return (
+                <button key={val} onClick={()=>setFilter(val)}
+                  className={`flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full transition-colors ${filter===val?'bg-pink-100 text-pink-600':'text-gray-400 hover:text-gray-600'}`}>
+                  {label}{cnt>0 && <span className="w-4 h-4 bg-pink-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{cnt}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {filtered.map(c=>(
+              <button key={c.id} onClick={()=>setSelectedId(c.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-pink-50/60 transition-colors border-b border-pink-50/50 ${c.id===selectedId?'bg-pink-50':''}`}>
+                <div className="relative shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-pink-100 border border-pink-200 flex items-center justify-center text-xl">{c.emoji}</div>
+                  {c.online && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-white"/>}
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className={`text-xs font-semibold truncate ${c.id===selectedId?'text-pink-600':'text-gray-700'}`}>{c.name}</span>
+                    <span className="text-[10px] text-gray-400 shrink-0 ml-1">{c.time}</span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 truncate">
+                    {(allMsgs[c.id]||[]).length>0 ? allMsgs[c.id].slice(-1)[0].text.split('\n')[0] : c.lastMsg}
+                  </p>
+                </div>
+                {c.unread>0 && <span className="w-5 h-5 bg-pink-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">{c.unread}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 右: 会話 */}
+        <div className={`flex-1 bg-white rounded-2xl border border-pink-100 shadow-sm flex flex-col ${H}`}>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-pink-50">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-10 h-10 rounded-full bg-pink-100 border border-pink-200 flex items-center justify-center text-xl">{selected?.emoji}</div>
+                {selected?.online && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-white"/>}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-800">{selected?.name}</p>
+                <p className="text-[11px] font-medium" style={{color:selected?.online?'#34d399':'#9ca3af'}}>
+                  {selected?.online?'● オンライン':'　オフライン'}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-1">
+              {['🔍','📞','···'].map(ic=>(
+                <button key={ic} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-pink-50 text-gray-400 hover:text-gray-600 transition-colors text-sm">{ic}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            <div className="flex items-center gap-3 my-2">
+              <div className="flex-1 h-px bg-pink-100"/><span className="text-[11px] text-gray-400 bg-pink-50 px-3 py-0.5 rounded-full">今日 5/20（月）</span><div className="flex-1 h-px bg-pink-100"/>
+            </div>
+            {messages.map(msg=>(
+              <div key={msg.id} className={`flex items-end gap-2 ${msg.from==='me'?'flex-row-reverse':''}`}>
+                {msg.from==='other' && <div className="w-8 h-8 rounded-full bg-pink-100 border border-pink-200 flex items-center justify-center text-base shrink-0 mb-0.5">{selected?.emoji}</div>}
+                <div className={`max-w-[65%] flex flex-col gap-1 ${msg.from==='me'?'items-end':'items-start'}`}>
+                  <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-line ${msg.from==='me'?'bg-gradient-to-br from-pink-400 to-pink-500 text-white rounded-br-sm':'bg-gray-50 border border-gray-100 text-gray-700 rounded-bl-sm'}`}>
+                    {msg.text}
+                  </div>
+                  <div className={`flex items-center gap-1 ${msg.from==='me'?'flex-row-reverse':''}`}>
+                    <span className="text-[10px] text-gray-400">{msg.time}</span>
+                    {msg.from==='me' && msg.read && <span className="text-[10px] text-pink-400">✓✓</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div ref={endRef}/>
+          </div>
+
+          <div className="flex items-center gap-2 px-4 py-3 border-t border-pink-50">
+            <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-pink-50 text-gray-400 hover:text-pink-400 transition-colors text-lg shrink-0">📎</button>
+            <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-pink-50 text-gray-400 hover:text-pink-400 transition-colors text-lg shrink-0">😊</button>
+            <input type="text" value={inputText} onChange={e=>setInputText(e.target.value)}
+              onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}}
+              placeholder="メッセージを入力..."
+              className="flex-1 text-sm text-gray-700 bg-pink-50/40 border border-pink-100 rounded-xl px-4 py-2.5 focus:border-pink-300 focus:bg-white transition-colors placeholder:text-gray-300"/>
+            <button onClick={sendMsg} className="w-10 h-10 bg-gradient-to-br from-pink-400 to-pink-500 hover:from-pink-500 hover:to-pink-600 rounded-full flex items-center justify-center text-white shadow-sm transition-all shrink-0 text-base">➤</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  /* ══════════════════════════════════════════
+     設定
+  ══════════════════════════════════════════ */
+  const SettingsScreen = ({ profile, setProfile }) => {
+    const [activeMenu, setActiveMenu] = useState('basic');
+    const [editing, setEditing]       = useState(false);
+    const [form, setForm]             = useState({...profile});
+    const [notify, setNotify]         = useState({ email:true, push:true, shift:true, deadline:true });
+    const [display, setDisplay]       = useState({ theme:'light', lang:'ja' });
+    const [pwForm, setPwForm]         = useState({ current:'', next:'', confirm:'' });
+    const [saved, setSaved]           = useState('');
+
+    const setF = (k,v) => setForm(p=>({...p,[k]:v}));
+    const saveProfile = () => { setProfile(form); setEditing(false); setSaved('profile'); setTimeout(()=>setSaved(''),2000); };
+
+    const InfoRow = ({label,value}) => (
+      <div className="flex gap-4 text-sm py-1.5">
+        <span className="text-gray-400 w-32 shrink-0">{label}</span>
+        <span className="text-gray-700">{value}</span>
+      </div>
+    );
+    const Tag = ({label,color}) => {
+      const c = {pink:'bg-pink-100 text-pink-600', mint:'bg-emerald-100 text-emerald-600'};
+      return <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${c[color]}`}>{label}</span>;
+    };
+    const EditBtn = ({onClick}) => (
+      <button onClick={onClick} className="flex items-center gap-1.5 text-xs text-pink-400 border border-pink-200 rounded-full px-3 py-1.5 hover:bg-pink-50 transition-colors shrink-0">✏️ 編集する</button>
+    );
+    const SectionCard = ({children, className=''}) => (
+      <div className={`bg-white rounded-2xl border border-pink-100 shadow-sm p-5 ${className}`}>{children}</div>
+    );
+
+    const BasicContent = () => (
+      <div className="space-y-4">
+        <SectionCard>
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <div className="flex items-center gap-2"><span>👤</span><h3 className="text-sm font-semibold text-gray-700">基本情報</h3></div>
+              <p className="text-xs text-gray-400 mt-1 ml-6">プロフィールや所属など、基本となる情報を確認・編集できます。</p>
+            </div>
+            <EditBtn onClick={()=>{ setForm({...profile}); setEditing(true); }}/>
+          </div>
+          {saved==='profile' && <div className="mb-4 text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">✓ プロフィールを保存しました</div>}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 mb-3">プロフィール</p>
+              <div className="flex gap-4">
+                <div className="w-16 h-16 rounded-full bg-pink-100 border-2 border-pink-200 flex items-center justify-center text-3xl shrink-0">👩‍⚕️</div>
+                <div className="space-y-0.5">
+                  <InfoRow label="氏名"           value={profile.name}/>
+                  <InfoRow label="職種 / 経験年数" value={`${profile.role} / ${profile.exp}`}/>
+                  <InfoRow label="スタッフID"      value={profile.staffId}/>
+                  <InfoRow label="メールアドレス"  value={profile.email}/>
+                  <InfoRow label="電話番号"        value={profile.tel}/>
+                  <InfoRow label="入職日"          value={profile.joinDate}/>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 mb-3">所属情報</p>
+              <div className="space-y-0.5">
+                <InfoRow label="所属クリニック" value={profile.clinic}/>
+                <InfoRow label="所属部署"       value={profile.dept}/>
+                <InfoRow label="役職"           value={profile.position}/>
+                <InfoRow label="雇用形態"       value={profile.employment}/>
+                <InfoRow label="勤務形態"       value={profile.workStyle}/>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <SectionCard>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-700">スキル・資格</h3>
+              <EditBtn onClick={()=>{ setForm({...profile}); setEditing(true); }}/>
+            </div>
+            <div className="space-y-3">
+              <div><Tag label="資格" color="pink"/><ul className="mt-2 space-y-1 ml-1">{profile.certs.map(s=><li key={s} className="text-sm text-gray-700">・{s}</li>)}</ul></div>
+              <div><Tag label="スキル" color="mint"/><ul className="mt-2 space-y-1 ml-1">{profile.skills.map(s=><li key={s} className="text-sm text-gray-700">・{s}</li>)}</ul></div>
+            </div>
+          </SectionCard>
+          <SectionCard>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-700">目標の基本設定</h3>
+              <EditBtn onClick={()=>{}}/>
+            </div>
+            <div className="space-y-0.5">
+              <InfoRow label="評価期間"       value="毎月1日 〜 月末"/>
+              <InfoRow label="目標件数"       value="8件"/>
+              <InfoRow label="評価者"         value="佐藤 直樹（主任）"/>
+              <InfoRow label="自己評価の締切" value="毎月25日"/>
+              <InfoRow label="上司評価の締切" value="毎月末日"/>
+            </div>
+          </SectionCard>
+        </div>
+
+        <SectionCard>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2"><span>🔒</span><h3 className="text-sm font-semibold text-gray-700">プライバシー設定</h3></div>
+            <EditBtn onClick={()=>{}}/>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            <InfoRow label="プロフィールの公開範囲" value="所属部署内のみ"/>
+            <div className="flex gap-4 text-sm py-1.5">
+              <span className="text-gray-400 w-36 shrink-0">チャットの既読表示</span>
+              <span className="text-emerald-500 font-semibold">ON</span>
+            </div>
+          </div>
+        </SectionCard>
+      </div>
+    );
+
+    const AccountContent = () => {
+      const [ok, setOk] = useState('');
+      return (
+        <SectionCard>
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">アカウント設定</h3>
+          {ok && <div className="mb-4 text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">✓ {ok}</div>}
+          <div className="space-y-4 max-w-md">
+            <LabelInput label="メールアドレス" value={pwForm.current||profile.email} onChange={v=>setPwForm(p=>({...p,current:v}))} placeholder="新しいメールアドレス"/>
+            <div className="pt-2 border-t border-pink-50">
+              <p className="text-xs font-semibold text-gray-500 mb-3">パスワード変更</p>
+              <div className="space-y-3">
+                <LabelInput label="現在のパスワード" value="" onChange={()=>{}} type="password" placeholder="••••••••"/>
+                <LabelInput label="新しいパスワード" value="" onChange={()=>{}} type="password" placeholder="••••••••"/>
+                <LabelInput label="確認（再入力）"   value="" onChange={()=>{}} type="password" placeholder="••••••••"/>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <PinkBtn onClick={()=>{setOk('変更を保存しました');setTimeout(()=>setOk(''),2000);}}>変更を保存</PinkBtn>
+            </div>
+          </div>
+        </SectionCard>
+      );
+    };
+
+    const NotifyContent = () => (
+      <SectionCard>
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">通知設定</h3>
+        <div className="space-y-4 max-w-md">
+          {[['email','メール通知','新着メッセージや評価をメールで受け取る'],
+            ['push', 'プッシュ通知','ブラウザのプッシュ通知を受け取る'],
+            ['shift','シフト変更通知','シフトが変更された際に通知する'],
+            ['deadline','評価期限通知','評価の締切前にリマインドを送る']].map(([k,title,sub])=>(
+            <div key={k} className="flex items-center justify-between py-3 border-b border-pink-50 last:border-0">
+              <div>
+                <p className="text-sm font-medium text-gray-700">{title}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+              </div>
+              <Toggle checked={notify[k]} onChange={v=>setNotify(p=>({...p,[k]:v}))}/>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+    );
+
+    const DisplayContent = () => (
+      <SectionCard>
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">表示設定</h3>
+        <div className="space-y-5 max-w-md">
+          <div>
+            <p className="text-xs text-gray-500 mb-2">テーマ</p>
+            <div className="flex gap-2">
+              {[['light','☀️ ライト'],['dark','🌙 ダーク']].map(([val,label])=>(
+                <button key={val} onClick={()=>setDisplay(p=>({...p,theme:val}))}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${display.theme===val?'bg-pink-50 border-pink-300 text-pink-600':'border-gray-200 text-gray-500 hover:border-pink-200'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-2">言語</p>
+            <div className="flex gap-2">
+              {[['ja','🇯🇵 日本語'],['en','🇺🇸 English']].map(([val,label])=>(
+                <button key={val} onClick={()=>setDisplay(p=>({...p,lang:val}))}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${display.lang===val?'bg-pink-50 border-pink-300 text-pink-600':'border-gray-200 text-gray-500 hover:border-pink-200'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <PinkBtn onClick={()=>setSaved('display')} className="w-full">
+            {saved==='display'?'✓ 保存しました':'設定を保存する'}
+          </PinkBtn>
+        </div>
+      </SectionCard>
+    );
+
+    const DataContent = () => {
+      const [confirm, setConfirm] = useState(false);
+      return (
+        <SectionCard>
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">データ管理</h3>
+          <div className="space-y-4 max-w-md">
+            <div className="flex items-center justify-between py-3 border-b border-pink-50">
+              <div>
+                <p className="text-sm font-medium text-gray-700">データのエクスポート</p>
+                <p className="text-xs text-gray-400 mt-0.5">目標・評価データをCSV形式でダウンロード</p>
+              </div>
+              <OutlineBtn onClick={()=>alert('CSVをダウンロードします')}>エクスポート</OutlineBtn>
+            </div>
+            <div className="flex items-center justify-between py-3 border-b border-pink-50">
+              <div>
+                <p className="text-sm font-medium text-gray-700">キャッシュを削除</p>
+                <p className="text-xs text-gray-400 mt-0.5">アプリのキャッシュデータを削除する</p>
+              </div>
+              <OutlineBtn onClick={()=>setSaved('cache')}>削除する</OutlineBtn>
+            </div>
+            {saved==='cache' && <p className="text-xs text-emerald-600">✓ キャッシュを削除しました</p>}
+            <div className="pt-2">
+              <p className="text-sm font-medium text-red-400 mb-1">アカウント削除</p>
+              <p className="text-xs text-gray-400 mb-3">この操作は取り消せません。すべてのデータが完全に削除されます。</p>
+              {!confirm
+                ? <button onClick={()=>setConfirm(true)} className="text-xs text-red-400 border border-red-200 rounded-xl px-4 py-2 hover:bg-red-50 transition-colors">アカウントを削除する</button>
+                : <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+                    <p className="text-xs text-red-600 font-semibold">本当に削除しますか？この操作は取り消せません。</p>
+                    <div className="flex gap-2">
+                      <button onClick={()=>setConfirm(false)} className="flex-1 py-2 rounded-xl text-xs border border-gray-200 text-gray-600 hover:bg-gray-50">キャンセル</button>
+                      <button className="flex-1 py-2 rounded-xl text-xs bg-red-400 text-white hover:bg-red-500">削除する</button>
+                    </div>
+                  </div>
+              }
+            </div>
+          </div>
+        </SectionCard>
+      );
+    };
+
+    return (
+      <>
+        <div className="flex gap-4 items-start">
+          <div className="w-64 shrink-0 bg-white rounded-2xl border border-pink-100 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-4 px-2"><span>⚙️</span><h2 className="text-sm font-semibold text-gray-600">設定メニュー</h2></div>
+            <div className="space-y-1">
+              {SETTING_MENUS.map(m=>(
+                <button key={m.id} onClick={()=>setActiveMenu(m.id)}
+                  className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${activeMenu===m.id?'bg-pink-50':'hover:bg-gray-50'}`}>
+                  <span className="text-base mt-0.5 shrink-0">{m.icon}</span>
+                  <div>
+                    <p className={`text-sm font-semibold leading-tight ${activeMenu===m.id?'text-pink-600':'text-gray-700'}`}>{m.label}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{m.sub}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            {activeMenu==='basic'   && <BasicContent/>}
+            {activeMenu==='account' && <AccountContent/>}
+            {activeMenu==='notify'  && <NotifyContent/>}
+            {activeMenu==='display' && <DisplayContent/>}
+            {activeMenu==='data'    && <DataContent/>}
+          </div>
+        </div>
+
+        {/* プロフィール編集モーダル */}
+        {editing && (
+          <Modal title="基本情報の編集" onClose={()=>setEditing(false)} wide>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <LabelInput label="氏名"           value={form.name}       onChange={v=>setF('name',v)}/>
+              <LabelInput label="職種"           value={form.role}       onChange={v=>setF('role',v)}/>
+              <LabelInput label="経験年数"       value={form.exp}        onChange={v=>setF('exp',v)}/>
+              <LabelInput label="スタッフID"     value={form.staffId}    onChange={v=>setF('staffId',v)}/>
+              <LabelInput label="メールアドレス" value={form.email}      onChange={v=>setF('email',v)} type="email"/>
+              <LabelInput label="電話番号"       value={form.tel}        onChange={v=>setF('tel',v)}/>
+              <LabelInput label="入職日"         value={form.joinDate}   onChange={v=>setF('joinDate',v)}/>
+              <LabelInput label="所属クリニック" value={form.clinic}     onChange={v=>setF('clinic',v)}/>
+              <LabelInput label="所属部署"       value={form.dept}       onChange={v=>setF('dept',v)}/>
+              <LabelInput label="役職"           value={form.position}   onChange={v=>setF('position',v)}/>
+              <LabelInput label="雇用形態"       value={form.employment} onChange={v=>setF('employment',v)}/>
+              <LabelInput label="勤務形態"       value={form.workStyle}  onChange={v=>setF('workStyle',v)}/>
+            </div>
+            <div className="flex gap-2 mt-6 justify-end">
+              <OutlineBtn onClick={()=>setEditing(false)}>キャンセル</OutlineBtn>
+              <PinkBtn onClick={saveProfile}>保存する</PinkBtn>
+            </div>
+          </Modal>
+        )}
+      </>
+    );
+  };
+
+  /* ══════════════════════════════════════════
+     App（共有 state）
+  ══════════════════════════════════════════ */
+  const App = () => {
+    const [active,       setActive]       = useState('dashboard');
+    const [profile,      setProfile]      = useState(INIT_PROFILE);
+    const [tasks,        setTasks]        = useState(INIT_TASKS);
+    const [goals,        setGoals]        = useState(INIT_GOALS);
+    const [progressNote, setProgressNote] = useState(
+      '患者さんの状態変化に早く気づけるよう、\n観察項目を意識して行動できました。\n新人スタッフへの指導も少しずつ\n自信を持ってできるようになってきました。'
+    );
+
+    const toggleTask = id => setTasks(prev=>prev.map(t=>t.id===id?{...t,done:!t.done}:t));
+    const addTask    = ({text,due}) => setTasks(prev=>[...prev,{id:Date.now(),text,due,done:false}]);
+    const unread     = CHAT_CONTACTS.reduce((s,c)=>s+c.unread,0);
+    const isChat     = active==='chat';
+
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header activeTab={active} profile={profile}/>
+        <main className={`flex-1 overflow-auto ${isChat?'p-4 pb-20':'p-4 pb-24'}`}>
+          <div className="max-w-screen-xl mx-auto">
+            {active==='dashboard' && <DashboardScreen profile={profile} tasks={tasks} goals={goals} toggleTask={toggleTask} addTask={addTask} setActive={setActive}/>}
+            {active==='goals'     && <GoalsScreen     goals={goals} setGoals={setGoals} progressNote={progressNote} setProgressNote={setProgressNote} setActive={setActive}/>}
+            {active==='chat'      && <ChatScreen/>}
+            {active==='beauty'    && <BeautyScreen/>}
+            {active==='settings'  && <SettingsScreen  profile={profile} setProfile={setProfile}/>}
+          </div>
+        </main>
+        <TabBar active={active} setActive={setActive} unreadCount={unread}/>
+      </div>
+    );
+  };
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>
