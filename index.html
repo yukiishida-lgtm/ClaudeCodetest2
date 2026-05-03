@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>タイマーアプリ</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      text-align: center;
+      background: #16213e;
+      padding: 48px 64px;
+      border-radius: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    h1 { font-size: 1.4rem; letter-spacing: 0.2em; color: #a8b2d8; margin-bottom: 32px; }
+
+    .display {
+      font-size: 5rem;
+      font-weight: 300;
+      letter-spacing: 0.05em;
+      color: #e2e8f0;
+      margin-bottom: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .display.warning { color: #f6ad55; }
+    .display.danger  { color: #fc8181; }
+
+    .progress-bar {
+      width: 100%;
+      height: 4px;
+      background: #2d3748;
+      border-radius: 2px;
+      margin-bottom: 40px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #667eea;
+      border-radius: 2px;
+      transition: width 1s linear, background 0.3s;
+      width: 100%;
+    }
+
+    .progress-fill.warning { background: #f6ad55; }
+    .progress-fill.danger  { background: #fc8181; }
+
+    .inputs {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      margin-bottom: 32px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .input-group label { font-size: 0.75rem; color: #718096; letter-spacing: 0.1em; }
+
+    .input-group input {
+      width: 72px;
+      padding: 8px;
+      font-size: 1.5rem;
+      text-align: center;
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 8px;
+      color: #e2e8f0;
+      outline: none;
+    }
+
+    .input-group input:focus { border-color: #667eea; }
+
+    .buttons { display: flex; gap: 12px; justify-content: center; }
+
+    button {
+      padding: 12px 28px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+
+    button:active { transform: scale(0.96); }
+
+    #startBtn  { background: #667eea; color: #fff; }
+    #pauseBtn  { background: #4a5568; color: #e2e8f0; }
+    #resetBtn  { background: #2d3748; color: #a0aec0; }
+
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>T I M E R</h1>
+  <div class="display" id="display">00:00</div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  <div class="inputs">
+    <div class="input-group">
+      <label>MIN</label>
+      <input type="number" id="minInput" min="0" max="99" value="1">
+    </div>
+    <div class="input-group">
+      <label>SEC</label>
+      <input type="number" id="secInput" min="0" max="59" value="0">
+    </div>
+  </div>
+  <div class="buttons">
+    <button id="startBtn" onclick="start()">スタート</button>
+    <button id="pauseBtn" onclick="pause()" disabled>一時停止</button>
+    <button id="resetBtn" onclick="reset()">リセット</button>
+  </div>
+</div>
+
+<script>
+  let total = 0, remaining = 0, interval = null, running = false;
+
+  const display = document.getElementById('display');
+  const fill    = document.getElementById('progressFill');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  function fmt(s) {
+    const m = Math.floor(s / 60), sec = s % 60;
+    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function updateColor(s) {
+    const ratio = total > 0 ? s / total : 1;
+    const cls = ratio <= 0.1 ? 'danger' : ratio <= 0.25 ? 'warning' : '';
+    display.className = 'display ' + cls;
+    fill.className    = 'progress-fill ' + cls;
+  }
+
+  function start() {
+    if (running) return;
+    if (remaining === 0) {
+      const m = parseInt(document.getElementById('minInput').value) || 0;
+      const s = parseInt(document.getElementById('secInput').value) || 0;
+      total = remaining = m * 60 + s;
+      if (total === 0) return;
+    }
+    running = true;
+    startBtn.disabled = true;
+    pauseBtn.disabled = false;
+    interval = setInterval(tick, 1000);
+  }
+
+  function tick() {
+    remaining--;
+    display.textContent = fmt(remaining);
+    fill.style.width = (total > 0 ? remaining / total * 100 : 0) + '%';
+    updateColor(remaining);
+    if (remaining <= 0) {
+      clearInterval(interval);
+      running = false;
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+      notify();
+    }
+  }
+
+  function pause() {
+    if (!running) return;
+    clearInterval(interval);
+    running = false;
+    startBtn.disabled = false;
+    pauseBtn.disabled = true;
+  }
+
+  function reset() {
+    clearInterval(interval);
+    running = false;
+    remaining = 0;
+    display.textContent = '00:00';
+    display.className = 'display';
+    fill.style.width = '100%';
+    fill.className = 'progress-fill';
+    startBtn.disabled = false;
+    pauseBtn.disabled = true;
+  }
+
+  function notify() {
+    display.textContent = '終了!';
+    if (Notification.permission === 'granted') {
+      new Notification('タイマー終了', { body: '時間になりました！' });
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then(p => {
+        if (p === 'granted') new Notification('タイマー終了', { body: '時間になりました！' });
+      });
+    }
+  }
+
+  display.textContent = fmt(60);
+  fill.style.width = '100%';
+</script>
+</body>
+</html>
